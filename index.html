@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gift Radar</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #0a0c11; --card: #141821; --card2: #1b2130; --line: #252c3b;
+    --text: #eef1f7; --muted: #8b93a7; --accent: #2f8cff; --accent2: #7c5cff;
+    --good: #22c55e; --warn: #f5a524; --bad: #f04b4b; --radius: 18px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { background: var(--bg); }
+  body {
+    margin: 0; color: var(--text); padding: 14px 16px 110px;
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Inter, sans-serif;
+  }
+  button, input { font: inherit; color: inherit; }
+  .muted { color: var(--muted); }
+
+  /* шапка */
+  .hero {
+    position: relative; overflow: hidden; border-radius: 24px; padding: 18px;
+    background: radial-gradient(120% 140% at 0% 0%, #22407a 0%, #171c33 45%, #1c1430 100%);
+    border: 1px solid #2a3350;
+  }
+  .hero::after {
+    content: ""; position: absolute; right: -40px; top: -40px; width: 170px; height: 170px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(124,92,255,.55), transparent 65%);
+  }
+  .hero-top { display: flex; align-items: center; gap: 12px; position: relative; z-index: 1; }
+  .logo {
+    width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 24px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 8px 24px rgba(47,140,255,.35);
+  }
+  .hero h1 { margin: 0; font-size: 21px; letter-spacing: .2px; }
+  .hero p { margin: 2px 0 0; font-size: 13px; color: #b6bfd6; }
+  .status-row { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; position: relative; z-index: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
+          background: rgba(34,197,94,.14); color: #6ee7a0; }
+  .pill.paused { background: rgba(245,165,36,.14); color: #ffc766; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 4px rgba(110,231,160,.18); }
+  .pill.paused .dot { box-shadow: 0 0 0 4px rgba(255,199,102,.18); }
+
+  /* переключатель */
+  .switch { position: relative; width: 50px; height: 30px; flex: none; }
+  .switch input { display: none; }
+  .switch span { position: absolute; inset: 0; border-radius: 99px; background: #2b3346; transition: .2s; cursor: pointer; }
+  .switch span::before { content: ""; position: absolute; width: 24px; height: 24px; left: 3px; top: 3px; border-radius: 50%; background: #fff; transition: .2s; }
+  .switch input:checked + span { background: var(--good); }
+  .switch input:checked + span::before { transform: translateX(20px); }
+
+  /* цифры */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 12px 0 14px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 10px; text-align: center; }
+  .stat b { display: block; font-size: 22px; line-height: 1.1; }
+  .stat span { font-size: 11.5px; color: var(--muted); }
+
+  /* вкладки */
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 4px; margin-bottom: 14px; }
+  .tabs button { border: 0; background: none; padding: 10px; border-radius: 10px; font-weight: 600; color: var(--muted); cursor: pointer; }
+  .tabs button.on { background: var(--card2); color: var(--text); box-shadow: 0 1px 0 rgba(255,255,255,.04) inset; }
+
+  /* сделки */
+  .deal { display: flex; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; margin-bottom: 10px; }
+  .thumb { width: 78px; height: 78px; border-radius: 14px; flex: none; display: grid; place-items: center; font-size: 30px;
+           background: linear-gradient(135deg, #22407a, #3a2470); overflow: hidden; }
+  .thumb img { width: 86%; height: 86%; object-fit: contain; filter: drop-shadow(0 4px 8px rgba(0,0,0,.35)); }
+  .floors { font-size: 12px; color: #aeb7cc; }
+  .floors b { color: var(--text); font-weight: 700; }
+  .deal .body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .deal .row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .deal .name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .price { font-weight: 800; white-space: nowrap; }
+  .ton { color: var(--accent); }
+  .attrs { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tags { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tag { font-size: 11.5px; padding: 3px 8px; border-radius: 999px; background: var(--card2); color: #c9d1e4; }
+  .tag.hot { background: rgba(34,197,94,.16); color: #6ee7a0; font-weight: 700; }
+  .deal .acts { display: flex; gap: 6px; margin-top: 2px; }
+  .btn-s { border: 0; border-radius: 10px; padding: 7px 10px; font-size: 12.5px; font-weight: 600; cursor: pointer; background: var(--card2); }
+  .btn-s.primary { background: var(--accent); color: #fff; }
+  .meta { font-size: 11px; color: var(--muted); }
+  .empty { text-align: center; padding: 34px 16px; color: var(--muted); background: var(--card); border: 1px dashed var(--line); border-radius: var(--radius); }
+  .empty b { display: block; font-size: 32px; margin-bottom: 6px; }
+
+  /* фильтры */
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+  .card h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field { background: var(--card2); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+  .field label { display: block; font-size: 11.5px; color: var(--muted); }
+  .field input { width: 100%; border: 0; outline: 0; background: none; font-size: 18px; font-weight: 700; padding: 2px 0 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip { border: 1px solid var(--line); background: var(--card2); border-radius: 999px; padding: 7px 12px; font-size: 13px; cursor: pointer; user-select: none; }
+  .chip.on { background: rgba(47,140,255,.16); border-color: rgba(47,140,255,.55); color: #9cc6ff; }
+  .chip .x { margin-left: 6px; opacity: .6; }
+  .presets { margin-top: 10px; }
+  .range-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .range-head { gap: 10px; }
+  .range-head b { font-size: 22px; white-space: nowrap; }
+  input[type=range] { width: 100%; accent-color: var(--accent); margin: 12px 0 2px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; }
+  .toggle-row + .toggle-row { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 6px; }
+  .toggle-row small { display: block; color: var(--muted); font-size: 12px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .seg .chip { text-align: center; padding: 10px; font-weight: 700; border-radius: 12px; }
+  .add { display: flex; gap: 8px; margin-top: 10px; }
+  .add input { flex: 1; min-width: 0; background: var(--card2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; outline: 0; }
+  .add button { border: 0; border-radius: 12px; padding: 0 14px; background: var(--accent); color: #fff; font-weight: 700; cursor: pointer; }
+
+  /* кнопка сохранения вне Telegram */
+  .save { position: fixed; left: 16px; right: 16px; bottom: 16px; border: 0; border-radius: 14px; padding: 15px; font-weight: 800; font-size: 16px;
+          color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 10px 30px rgba(47,140,255,.35); cursor: pointer; display: none; }
+  .save.show { display: block; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+  <section class="hero">
+    <div class="hero-top">
+      <div class="logo">🎁</div>
+      <div>
+        <h1>Gift Radar</h1>
+        <p>Сканер выгодных NFT-подарков</p>
+      </div>
+    </div>
+    <div class="status-row">
+      <span class="pill" id="pill"><span class="dot"></span><span id="pillText">Работает</span></span>
+      <label class="switch" title="Пауза / работа"><input type="checkbox" id="running"><span></span></label>
+    </div>
+  </section>
+
+  <div class="stats">
+    <div class="stat"><b id="stFound">0</b><span>найдено</span></div>
+    <div class="stat"><b id="stMarkets">—</b><span>маркеты</span></div>
+    <div class="stat"><b id="stEvery">30с</b><span>проверка</span></div>
+  </div>
+
+  <div class="tabs">
+    <button class="on" data-tab="deals">Сделки</button>
+    <button data-tab="filters">Фильтры</button>
+  </div>
+
+  <section id="deals"></section>
+
+  <section id="filters" class="hidden">
+    <div class="card">
+      <h3>Цена, TON</h3>
+      <div class="two">
+        <div class="field"><label>от</label><input id="minPrice" type="number" inputmode="decimal" min="0" step="0.5"></div>
+        <div class="field"><label>до</label><input id="maxPrice" type="number" inputmode="decimal" min="0" step="0.5"></div>
+      </div>
+      <div class="chips presets" id="pricePresets"></div>
+    </div>
+
+    <div class="card">
+      <div class="range-head"><h3>Дешевле рынка</h3><b id="discVal">25%</b></div>
+      <input type="range" id="discount" min="0" max="60" step="5">
+      <div class="hint">Сообщать, если лот дешевле самого дешёвого похожего (та же модель или фон) хотя бы на столько. 0 — не считать.</div>
+    </div>
+
+    <div class="card">
+      <div class="range-head"><h3>Монохром не дороже</h3><b id="xfloorVal">2× флора</b></div>
+      <input type="range" id="xfloor" min="0" max="6" step="0.5">
+      <div class="hint">Монохром присылать, только если цена не выше стольких флоров коллекции — чтобы не слать переоценённые. 0 — без потолка.</div>
+    </div>
+
+    <div class="card">
+      <h3>Маркеты</h3>
+      <div class="seg" id="markets"></div>
+    </div>
+
+    <div class="card">
+      <h3>Что ещё ловить</h3>
+      <div class="toggle-row">
+        <div>Монохромы<small>цвет модели совпадает с фоном</small></div>
+        <label class="switch"><input type="checkbox" id="mono"><span></span></label>
+      </div>
+      <div class="toggle-row">
+        <div>Только чистые монохромы<small>цвет почти один в один — меньше, но лучше</small></div>
+        <label class="switch"><input type="checkbox" id="monoStrict"><span></span></label>
+      </div>
+      <div class="toggle-row">
+        <div>Красивые номера<small>#1–100, 777, 4444, круглые тысячи</small></div>
+        <label class="switch"><input type="checkbox" id="numbers"><span></span></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Хорошие фоны</h3>
+      <div class="hint" style="margin:-4px 0 10px">Лот с таким фоном приходит, только если он по флору этого фона в своей коллекции.</div>
+      <div class="chips" id="backdrops"></div>
+      <div class="add"><input id="bgInput" placeholder="Другой фон, например Gunmetal"><button id="bgAdd">+</button></div>
+    </div>
+
+    <div class="card">
+      <h3>Коллекции</h3>
+      <div class="chips" id="collections"></div>
+      <div class="add"><input id="colInput" placeholder="Например Plush Pepe"><button id="colAdd">+</button></div>
+      <div class="hint">Пусто — смотреть все коллекции.</div>
+    </div>
+  </section>
+
+  <button class="save" id="saveBtn">Сохранить фильтры</button>
+
+<script>
+const tg = window.Telegram && window.Telegram.WebApp;
+const inTelegram = !!(tg && tg.initData);
+const MARKETS = { portals: { title: "Portals", link: "https://t.me/portals/market" }, mrkt: { title: "MRKT", link: "https://t.me/mrkt/app" } };
+const BACKDROPS = ["Black", "Onyx Black", "Gunmetal", "Battleship Grey", "Steel Grey", "Platinum", "Ivory White",
+                   "Midnight Blue", "Navy Blue", "Sapphire", "Cobalt Blue", "Jade Green", "Pure Gold", "Satin Gold",
+                   "Burgundy", "Electric Purple", "Neon Blue"];
+
+// Данные приходят от бота в адресе: #d=<base64url(JSON)>. Без них — демо, чтобы было видно, как выглядит.
+function decode() {
+  const m = location.hash.match(/d=([A-Za-z0-9_\-]+)/);
+  if (!m) return null;
+  try {
+    let s = m[1].replace(/-/g, "+").replace(/_/g, "/");
+    s += "=".repeat((4 - s.length % 4) % 4);
+    const bytes = Uint8Array.from(atob(s), c => c.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch (e) { return null; }
+}
+const DEMO = {
+  cfg: { markets: ["portals"], collections: [], min_price: 0, max_price: 50, min_discount: 25, max_x_floor: 2, mono_mode: "strict",
+         backdrops: ["Black", "Onyx Black"], monochrome: true, nice_numbers: true, paused: false },
+  st: { found: 3, interval: 10 },
+  deals: [
+    { c: "Liberty Figure", n: 136983, m: "Ice Queen", b: "Cobalt Blue", s: "Carrot", p: 14.95, d: null, w: ["монохром"], mk: "portals",
+      f: 5.6, mf: 6.7, bc: ["#5b9ad2", "#2d5c94"], u: "https://t.me/portals/market", t: "12:31" },
+    { c: "Plush Pepe", n: 931, m: "Pumpkin", b: "Onyx Black", s: "Illuminati", p: 12.5, d: 41, w: ["дешевле рынка на 41%", "фон Onyx Black"], mk: "portals",
+      f: 9.9, mf: 11, bc: ["#363738", "#0e0f0f"], t: "03:58" },
+    { c: "Lol Pop", n: 4444, m: "Blue Goo", b: "Sapphire", s: "Star", p: 4.3, d: null, w: ["одинаковые цифры #4444"], mk: "mrkt",
+      f: 3.9, t: "03:12" },
+  ],
+};
+const data = decode() || DEMO;
+const cfg = JSON.parse(JSON.stringify(data.cfg));
+const initial = JSON.stringify(cfg);
+
+// Картинка модели — из открытой базы changes.tg, фон — градиент цветов фона подарка. Не загрузилась — 🎁.
+const modelImg = d => `https://api.changes.tg/model/${encodeURIComponent(d.c)}/${encodeURIComponent(d.m)}.png?size=256`;
+const HEX = /^#[0-9a-f]{6}$/i;
+const thumbBg = d => d.bc && HEX.test(d.bc[0]) && HEX.test(d.bc[1])
+  ? `background: radial-gradient(circle at 50% 45%, ${d.bc[0]}, ${d.bc[1]})` : "";
+const num = x => x == null ? "" : String(Math.round(x * 100) / 100);
+
+const $ = id => document.getElementById(id);
+const slug = c => (c || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const Slug = c => (c || "").replace(/[^A-Za-z0-9]/g, "");
+const esc = s => String(s ?? "").replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+
+function openLink(url) {
+  if (inTelegram && url.startsWith("https://t.me/")) tg.openTelegramLink(url);
+  else if (inTelegram) tg.openLink(url);
+  else window.open(url, "_blank");
+}
+
+// ── шапка и цифры
+function renderHead() {
+  $("running").checked = !cfg.paused;
+  $("pill").classList.toggle("paused", !!cfg.paused);
+  $("pillText").textContent = cfg.paused ? "На паузе" : "Работает";
+  $("stFound").textContent = (data.st && data.st.found) || (data.deals || []).length;
+  $("stMarkets").textContent = cfg.markets.length;
+  $("stEvery").textContent = ((data.st && data.st.interval) || 10) + "с";
+}
+
+// ── сделки
+function renderDeals() {
+  const box = $("deals");
+  const deals = data.deals || [];
+  if (!deals.length) {
+    box.innerHTML = '<div class="empty"><b>🔭</b>Пока тихо. Как только появится лот под твои фильтры — он будет здесь и придёт сообщением.</div>';
+    return;
+  }
+  box.innerHTML = deals.map((d, i) => {
+    const mk = MARKETS[d.mk] || MARKETS.portals;
+    const tags = (d.w || []).map(w => `<span class="tag${/дешевле/.test(w) ? " hot" : ""}">${esc(w)}</span>`).join("");
+    const floors = [d.f ? `флор <b>${esc(num(d.f))}</b>` : "", d.mf ? `модель <b>${esc(num(d.mf))}</b>` : ""].filter(Boolean).join(" · ");
+    return `<div class="deal">
+      <div class="thumb" style="${thumbBg(d)}"><img src="${esc(modelImg(d))}" alt="" loading="lazy" onerror="const p=this.parentNode;this.remove();p.textContent='🎁'"></div>
+      <div class="body">
+        <div class="row"><span class="name">${esc(d.c)} #${esc(d.n)}</span><span class="price">${esc(d.p)} <span class="ton">TON</span></span></div>
+        <div class="attrs">${esc(d.m)} · ${esc(d.b)} · ${esc(d.s)}</div>
+        ${floors ? `<div class="floors">${floors} TON</div>` : ""}
+        <div class="tags">${tags}</div>
+        <div class="row">
+          <div class="acts">
+            <button class="btn-s primary" data-open="${i}">${d.u ? "Купить" : esc(mk.title)}</button>
+            <button class="btn-s" data-gift="${i}">Подарок</button>
+          </div>
+          <span class="meta">${esc(d.t || "")}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+  box.querySelectorAll("[data-open]").forEach(b => b.onclick = () => {
+    const d = deals[b.dataset.open];
+    openLink(d.u && d.u.startsWith("https://t.me/") ? d.u : (MARKETS[d.mk] || MARKETS.portals).link);
+  });
+  box.querySelectorAll("[data-gift]").forEach(b => b.onclick = () => { const d = deals[b.dataset.gift]; openLink(`https://t.me/nft/${Slug(d.c)}-${d.n}`); });
+}
+
+// ── фильтры
+function chipList(el, items, selected, onToggle, removable) {
+  el.innerHTML = items.map(x => `<span class="chip${selected.includes(x) ? " on" : ""}" data-v="${esc(x)}">${esc(x)}${removable ? '<span class="x">✕</span>' : ""}</span>`).join("")
+    || '<span class="muted" style="font-size:13px">все коллекции</span>';
+  el.querySelectorAll(".chip").forEach(c => c.onclick = () => onToggle(c.dataset.v));
+}
+function renderFilters() {
+  $("minPrice").value = cfg.min_price;
+  $("maxPrice").value = cfg.max_price;
+  chipList($("pricePresets"), ["до 10", "до 25", "до 50", "до 100", "до 300"], [`до ${cfg.max_price}`], v => {
+    cfg.max_price = Number(v.replace("до ", "")); changed();
+  });
+  $("discount").value = cfg.min_discount;
+  $("discVal").textContent = cfg.min_discount ? cfg.min_discount + "%" : "выкл.";
+  $("xfloor").value = cfg.max_x_floor || 0;
+  $("xfloorVal").textContent = cfg.max_x_floor ? cfg.max_x_floor + "× флора" : "без потолка";
+  $("markets").innerHTML = Object.entries(MARKETS).map(([k, m]) =>
+    `<span class="chip${cfg.markets.includes(k) ? " on" : ""}" data-v="${k}">${m.title}</span>`).join("");
+  $("markets").querySelectorAll(".chip").forEach(c => c.onclick = () => {
+    const k = c.dataset.v;
+    if (cfg.markets.includes(k)) { if (cfg.markets.length > 1) cfg.markets = cfg.markets.filter(x => x !== k); }
+    else cfg.markets.push(k);
+    changed();
+  });
+  $("mono").checked = !!cfg.monochrome;
+  $("monoStrict").checked = cfg.mono_mode !== "wide";
+  $("numbers").checked = !!cfg.nice_numbers;
+  const allBg = [...new Set([...cfg.backdrops, ...BACKDROPS])];
+  chipList($("backdrops"), allBg, cfg.backdrops, v => {
+    cfg.backdrops = cfg.backdrops.includes(v) ? cfg.backdrops.filter(x => x !== v) : [...cfg.backdrops, v]; changed();
+  });
+  chipList($("collections"), cfg.collections, cfg.collections, v => {
+    cfg.collections = cfg.collections.filter(x => x !== v); changed();
+  }, true);
+}
+
+function changed() {
+  renderHead(); renderFilters();
+  const dirty = JSON.stringify(cfg) !== initial;
+  if (inTelegram) {
+    if (dirty) { tg.MainButton.setText("Сохранить фильтры"); tg.MainButton.show(); } else tg.MainButton.hide();
+  } else $("saveBtn").classList.toggle("show", dirty);
+}
+
+function save() {
+  const payload = JSON.stringify({ v: 1, cfg });
+  if (inTelegram) {
+    tg.HapticFeedback && tg.HapticFeedback.notificationOccurred("success");
+    tg.sendData(payload);                         // бот получит фильтры, окно закроется само
+  } else {
+    alert("Это предпросмотр вне Telegram. В Telegram фильтры уйдут боту:\n\n" + payload);
+  }
+}
+
+// ── события
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
+  $("deals").classList.toggle("hidden", b.dataset.tab !== "deals");
+  $("filters").classList.toggle("hidden", b.dataset.tab !== "filters");
+  tg && tg.HapticFeedback && tg.HapticFeedback.selectionChanged();
+});
+$("running").onchange = e => { cfg.paused = !e.target.checked; changed(); };
+$("minPrice").onchange = e => { cfg.min_price = Math.max(0, Number(e.target.value) || 0); changed(); };
+$("maxPrice").onchange = e => { cfg.max_price = Math.max(0, Number(e.target.value) || 0); changed(); };
+$("discount").oninput = e => { cfg.min_discount = Number(e.target.value); changed(); };
+$("xfloor").oninput = e => { cfg.max_x_floor = Number(e.target.value); changed(); };
+$("mono").onchange = e => { cfg.monochrome = e.target.checked; changed(); };
+$("monoStrict").onchange = e => { cfg.mono_mode = e.target.checked ? "strict" : "wide"; changed(); };
+$("numbers").onchange = e => { cfg.nice_numbers = e.target.checked; changed(); };
+function addFrom(inputId, key) {
+  const v = $(inputId).value.trim();
+  if (v && !cfg[key].some(x => x.toLowerCase() === v.toLowerCase())) { cfg[key].push(v); changed(); }
+  $(inputId).value = "";
+}
+$("bgAdd").onclick = () => addFrom("bgInput", "backdrops");
+$("colAdd").onclick = () => addFrom("colInput", "collections");
+$("bgInput").onkeydown = e => e.key === "Enter" && addFrom("bgInput", "backdrops");
+$("colInput").onkeydown = e => e.key === "Enter" && addFrom("colInput", "collections");
+$("saveBtn").onclick = save;
+
+if (inTelegram) {
+  tg.ready(); tg.expand();
+  try { tg.setHeaderColor("#0a0c11"); tg.setBackgroundColor("#0a0c11"); } catch (e) {}
+  tg.MainButton.color = "#2f8cff";
+  tg.MainButton.onClick(save);
+}
+renderHead(); renderDeals(); renderFilters();
+</script>
+</body>
+</html>
