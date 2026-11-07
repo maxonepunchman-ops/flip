@@ -112,11 +112,27 @@
   .add input { flex: 1; min-width: 0; background: var(--card2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; outline: 0; }
   .add button { border: 0; border-radius: 12px; padding: 0 14px; background: var(--accent); color: #fff; font-weight: 700; cursor: pointer; }
 
-  /* кнопка сохранения вне Telegram */
-  .save { position: fixed; left: 16px; right: 16px; bottom: 16px; border: 0; border-radius: 14px; padding: 15px; font-weight: 800; font-size: 16px;
-          color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 10px 30px rgba(47,140,255,.35); cursor: pointer; display: none; }
-  .save.show { display: block; }
+  /* кнопка «Сохранить фильтры»: видно нажатие, отправку и результат */
+  .save { position: fixed; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); border: 0; border-radius: 14px;
+          padding: 15px; font-weight: 800; font-size: 16px; color: #fff; cursor: pointer; display: none;
+          background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 10px 30px rgba(47,140,255,.35);
+          transition: transform .12s ease, background .25s ease, box-shadow .25s ease; }
+  .save.show { display: block; animation: rise .22s ease-out; }
+  .save:active { transform: scale(.96); }
+  .save.busy { opacity: .85; pointer-events: none; }
+  .save.busy::after { content: ""; display: inline-block; width: 14px; height: 14px; margin-left: 10px; vertical-align: -2px;
+                      border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+  .save.done { background: var(--good); box-shadow: 0 10px 30px rgba(34,197,94,.35); pointer-events: none; }
+  @keyframes rise { from { transform: translateY(20px); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .toast { position: fixed; left: 50%; top: calc(14px + env(safe-area-inset-top)); transform: translate(-50%, -20px); opacity: 0;
+           background: #1b2130; border: 1px solid var(--line); color: var(--text); padding: 10px 16px; border-radius: 999px;
+           font-size: 14px; font-weight: 600; box-shadow: 0 10px 30px rgba(0,0,0,.4); transition: .25s ease; pointer-events: none; z-index: 10; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.bad { border-color: rgba(240,75,75,.6); color: #ffb4b4; }
   .hidden { display: none; }
+  .credit { text-align: center; font-size: 11.5px; color: var(--muted); margin: 18px 0 0; }
+  .credit a { color: #9cc6ff; text-decoration: none; }
 </style>
 </head>
 <body>
@@ -205,7 +221,10 @@
     </div>
   </section>
 
+  <p class="credit">Картинки и цвета подарков — <a href="https://t.me/GiftChanges" id="creditLink">@GiftChanges</a> (api.changes.tg). Спасибо!</p>
+
   <button class="save" id="saveBtn">Сохранить фильтры</button>
+  <div class="toast" id="toast"></div>
 
 <script>
 const tg = window.Telegram && window.Telegram.WebApp;
@@ -214,10 +233,12 @@ const MARKETS = { portals: { title: "Portals", link: "https://t.me/portals/marke
 const BACKDROPS = ["Black", "Onyx Black", "Gunmetal", "Battleship Grey", "Steel Grey", "Platinum", "Ivory White",
                    "Midnight Blue", "Navy Blue", "Sapphire", "Cobalt Blue", "Jade Green", "Pure Gold", "Satin Gold",
                    "Burgundy", "Electric Purple", "Neon Blue"];
+const API = "https://api.changes.tg/";
 
-// Данные приходят от бота в адресе: #d=<base64url(JSON)>. Без них — демо, чтобы было видно, как выглядит.
-function decode() {
-  const m = location.hash.match(/d=([A-Za-z0-9_\-]+)/);
+// Данные приходят от бота в адресе кнопки «Панель»: #d=<base64url(JSON)>. Открыли без них (например, кнопкой
+// «Открыть» в списке чатов) — берём то, что запомнили в прошлый раз в облаке Telegram. Ничего нет — демо.
+function decodeHash(h) {
+  const m = (h || "").match(/d=([A-Za-z0-9_\-]+)/);
   if (!m) return null;
   try {
     let s = m[1].replace(/-/g, "+").replace(/_/g, "/");
@@ -226,39 +247,89 @@ function decode() {
     return JSON.parse(new TextDecoder().decode(bytes));
   } catch (e) { return null; }
 }
+const decode = () => decodeHash(location.hash);
 const DEMO = {
   cfg: { markets: ["portals"], collections: [], min_price: 0, max_price: 50, min_discount: 25, max_x_floor: 2, mono_mode: "strict",
-         backdrops: ["Black", "Onyx Black"], monochrome: true, nice_numbers: true, paused: false },
-  st: { found: 3, interval: 10 },
+         backdrops: ["Black", "Onyx Black"], monochrome: true, nice_numbers: true, hunt: true, paused: false },
+  st: { found: 3, interval: 10 }, bot: "",
   deals: [
     { c: "Liberty Figure", n: 136983, m: "Ice Queen", b: "Cobalt Blue", s: "Carrot", p: 14.95, d: null, w: ["монохром"], mk: "portals",
       f: 5.6, mf: 6.7, bc: ["#5b9ad2", "#2d5c94"], u: "https://t.me/portals/market", t: "12:31" },
-    { c: "Plush Pepe", n: 931, m: "Pumpkin", b: "Onyx Black", s: "Illuminati", p: 12.5, d: 41, w: ["дешевле рынка на 41%", "фон Onyx Black"], mk: "portals",
-      f: 9.9, mf: 11, bc: ["#363738", "#0e0f0f"], t: "03:58" },
+    { c: "Pet Snake", n: 10511, m: "Venomous", b: "Black", s: "Jingle Bell", p: 33, d: null, w: ["фон Black: самый дешёвый в коллекции, следующий 36 TON"], mk: "portals",
+      f: 4.33, mf: 5, bc: ["#363738", "#0e0f0f"], t: "03:58" },
     { c: "Lol Pop", n: 4444, m: "Blue Goo", b: "Sapphire", s: "Star", p: 4.3, d: null, w: ["одинаковые цифры #4444"], mk: "mrkt",
       f: 3.9, t: "03:12" },
   ],
 };
-const data = decode() || DEMO;
-const cfg = JSON.parse(JSON.stringify(data.cfg));
-const initial = JSON.stringify(cfg);
+let data, cfg, saved;
+const clone = x => JSON.parse(JSON.stringify(x));
+const filtersOf = c => { const x = clone(c); delete x.paused; return JSON.stringify(x); };   // пауза — не фильтр
 
 // Картинка модели — из открытой базы changes.tg, фон — градиент цветов фона подарка. Не загрузилась — 🎁.
-const modelImg = d => `https://api.changes.tg/model/${encodeURIComponent(d.c)}/${encodeURIComponent(d.m)}.png?size=256`;
+const modelImg = d => `${API}model/${encodeURIComponent(d.c)}/${encodeURIComponent(d.m)}.png?size=256`;
 const HEX = /^#[0-9a-f]{6}$/i;
 const thumbBg = d => d.bc && HEX.test(d.bc[0]) && HEX.test(d.bc[1])
   ? `background: radial-gradient(circle at 50% 45%, ${d.bc[0]}, ${d.bc[1]})` : "";
 const num = x => x == null ? "" : String(Math.round(x * 100) / 100);
 
 const $ = id => document.getElementById(id);
-const slug = c => (c || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const Slug = c => (c || "").replace(/[^A-Za-z0-9]/g, "");
 const esc = s => String(s ?? "").replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+const haptic = kind => { try { kind === "tap" ? tg.HapticFeedback.impactOccurred("light") : tg.HapticFeedback.notificationOccurred(kind); } catch (e) {} };
 
 function openLink(url) {
   if (inTelegram && url.startsWith("https://t.me/")) tg.openTelegramLink(url);
   else if (inTelegram) tg.openLink(url);
   else window.open(url, "_blank");
+}
+
+let toastTimer;
+function toast(text, bad) {
+  const t = $("toast");
+  t.textContent = text; t.classList.toggle("bad", !!bad); t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+// ── команда боту. Из кнопки меню Telegram не даёт мини-приложению писать боту напрямую, поэтому открываем
+//    ссылку t.me/<бот>?start=<код>: бот получит «/start <код>», применит и сразу удалит это сообщение.
+function sendCmd(code) {
+  if (!inTelegram) { toast("Предпросмотр: боту ушла бы команда " + code); return true; }
+  if (!data.bot) { toast("Обнови панель: отправь боту /panel", true); return false; }
+  tg.openTelegramLink(`https://t.me/${data.bot}?start=${code}`);
+  return true;
+}
+
+// ── кодирование фильтров в ≤64 символа (как decode_filters у бота)
+const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+const num4 = x => { let n = Math.max(0, Math.min(16777215, Math.round(x * 10))), s = ""; for (let i = 0; i < 4; i++) { s = B64[n & 63] + s; n = Math.floor(n / 64); } return s; };
+function mask(names, chosen) {
+  const want = new Set(chosen.map(x => x.toLowerCase())); let s = "";
+  for (let i = 0; i < names.length; i += 6) {
+    let v = 0;
+    for (let j = 0; j < 6 && i + j < names.length; j++) if (want.has(names[i + j].toLowerCase())) v |= 1 << j;
+    s += B64[v];
+  }
+  return s;
+}
+let VOCAB = null;
+async function vocab() {
+  if (!VOCAB) {
+    const [b, g] = await Promise.all([fetch(API + "backdrops").then(r => r.json()), fetch(API + "gifts").then(r => r.json())]);
+    VOCAB = { b: b.map(x => x.name), g: g.filter(x => typeof x === "string") };
+  }
+  return VOCAB;
+}
+function encodeFilters(c, V) {
+  const lower = list => new Set(list.map(x => x.toLowerCase()));
+  const badBg = c.backdrops.filter(x => !lower(V.b).has(x.toLowerCase()));
+  const badCol = c.collections.filter(x => !lower(V.g).has(x.toLowerCase()));
+  if (badBg.length) throw new Error("Нет такого фона: " + badBg.join(", "));
+  if (badCol.length) throw new Error("Нет такой коллекции: " + badCol.join(", "));
+  const flags = (c.markets.includes("portals") ? 1 : 0) | (c.markets.includes("mrkt") ? 2 : 0) | (c.monochrome ? 4 : 0)
+              | (c.mono_mode !== "wide" ? 8 : 0) | (c.nice_numbers ? 16 : 0) | (c.hunt !== false ? 32 : 0);
+  return "f" + B64[flags] + B64[Math.min(63, Math.round((c.min_discount || 0) / 5))] + B64[Math.min(63, Math.round((c.max_x_floor || 0) * 2))]
+       + num4(c.min_price || 0) + num4(c.max_price || 0) + B64[V.b.length % 64] + B64[V.g.length % 64]
+       + mask(V.b, c.backdrops) + mask(V.g, c.collections).replace(/A+$/, "");
 }
 
 // ── шапка и цифры
@@ -281,7 +352,7 @@ function renderDeals() {
   }
   box.innerHTML = deals.map((d, i) => {
     const mk = MARKETS[d.mk] || MARKETS.portals;
-    const tags = (d.w || []).map(w => `<span class="tag${/дешевле/.test(w) ? " hot" : ""}">${esc(w)}</span>`).join("");
+    const tags = (d.w || []).map(w => `<span class="tag${/дешевле|самый дешёвый/.test(w) ? " hot" : ""}">${esc(w)}</span>`).join("");
     const floors = [d.f ? `флор <b>${esc(num(d.f))}</b>` : "", d.mf ? `модель <b>${esc(num(d.mf))}</b>` : ""].filter(Boolean).join(" · ");
     return `<div class="deal">
       <div class="thumb" style="${thumbBg(d)}"><img src="${esc(modelImg(d))}" alt="" loading="lazy" onerror="const p=this.parentNode;this.remove();p.textContent='🎁'"></div>
@@ -343,22 +414,36 @@ function renderFilters() {
   }, true);
 }
 
+// Кнопка «Сохранить фильтры» появляется, только когда фильтры изменились. Пауза в фильтры не входит.
 function changed() {
   renderHead(); renderFilters();
-  const dirty = JSON.stringify(cfg) !== initial;
-  if (inTelegram) {
-    if (dirty) { tg.MainButton.setText("Сохранить фильтры"); tg.MainButton.show(); } else tg.MainButton.hide();
-  } else $("saveBtn").classList.toggle("show", dirty);
+  const b = $("saveBtn");
+  if (b.classList.contains("busy") || b.classList.contains("done")) return;
+  b.classList.toggle("show", filtersOf(cfg) !== saved);
 }
 
-function save() {
-  const payload = JSON.stringify({ v: 1, cfg });
-  if (inTelegram) {
-    tg.HapticFeedback && tg.HapticFeedback.notificationOccurred("success");
-    tg.sendData(payload);                         // бот получит фильтры, окно закроется само
-  } else {
-    alert("Это предпросмотр вне Telegram. В Telegram фильтры уйдут боту:\n\n" + payload);
+async function save() {
+  const b = $("saveBtn");
+  haptic("tap");
+  b.classList.add("busy"); b.textContent = "Сохраняю";
+  try {
+    const code = encodeFilters(cfg, await vocab());
+    if (!sendCmd(code)) throw new Error("");
+    saved = filtersOf(cfg);
+    b.classList.remove("busy"); b.classList.add("done"); b.textContent = "✓ Сохранено";
+    haptic("success");
+    setTimeout(() => { b.classList.remove("done", "show"); b.textContent = "Сохранить фильтры"; changed(); }, 1800);
+  } catch (e) {
+    b.classList.remove("busy"); b.textContent = "Сохранить фильтры";
+    haptic("error");
+    if (e.message) toast(e.message.startsWith("Нет такой") ? e.message : "Не получилось — проверь интернет и попробуй ещё раз", true);
   }
+}
+
+// Пауза — сразу, без «Сохранить».
+function togglePause(on) {
+  cfg.paused = on; renderHead(); haptic("tap");
+  if (sendCmd(on ? "p1" : "p0")) toast(on ? "⏸ Пауза включена" : "▶️ Поиск продолжен");
 }
 
 // ── события
@@ -366,9 +451,9 @@ document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
   $("deals").classList.toggle("hidden", b.dataset.tab !== "deals");
   $("filters").classList.toggle("hidden", b.dataset.tab !== "filters");
-  tg && tg.HapticFeedback && tg.HapticFeedback.selectionChanged();
+  try { tg.HapticFeedback.selectionChanged(); } catch (e) {}
 });
-$("running").onchange = e => { cfg.paused = !e.target.checked; changed(); };
+$("running").onchange = e => togglePause(!e.target.checked);
 $("minPrice").onchange = e => { cfg.min_price = Math.max(0, Number(e.target.value) || 0); changed(); };
 $("maxPrice").onchange = e => { cfg.max_price = Math.max(0, Number(e.target.value) || 0); changed(); };
 $("discount").oninput = e => { cfg.min_discount = Number(e.target.value); changed(); };
@@ -386,14 +471,29 @@ $("colAdd").onclick = () => addFrom("colInput", "collections");
 $("bgInput").onkeydown = e => e.key === "Enter" && addFrom("bgInput", "backdrops");
 $("colInput").onkeydown = e => e.key === "Enter" && addFrom("colInput", "collections");
 $("saveBtn").onclick = save;
+$("creditLink").onclick = e => { e.preventDefault(); openLink("https://t.me/GiftChanges"); };
+
+function start(d) {
+  data = d; cfg = clone(d.cfg); saved = filtersOf(cfg);
+  if (!Array.isArray(cfg.backdrops)) cfg.backdrops = [];
+  if (!Array.isArray(cfg.collections)) cfg.collections = [];
+  renderHead(); renderDeals(); renderFilters();
+}
 
 if (inTelegram) {
   tg.ready(); tg.expand();
   try { tg.setHeaderColor("#0a0c11"); tg.setBackgroundColor("#0a0c11"); } catch (e) {}
-  tg.MainButton.color = "#2f8cff";
-  tg.MainButton.onClick(save);
 }
-renderHead(); renderDeals(); renderFilters();
+const fromHash = decode();
+const cloud = inTelegram && tg.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast("6.9") ? tg.CloudStorage : null;
+if (fromHash) {
+  start(fromHash);
+  if (cloud) try { cloud.setItem("d", location.hash.slice(1), () => {}); } catch (e) {}
+} else if (cloud) {
+  cloud.getItem("d", (err, value) => start((!err && decodeHash(value)) || DEMO));
+} else {
+  start(DEMO);
+}
 </script>
 </body>
 </html>
