@@ -479,7 +479,8 @@ function renderDeals() {
   }
   box.innerHTML = deals.map((d, i) => {
     const mk = MARKETS[d.mk] || MARKETS.portals;
-    const tags = (d.w || []).map(w => `<span class="tag${/дешевле|самый дешёвый/.test(w) ? " hot" : ""}">${esc(w)}</span>`).join("");
+    const age = d.nl === 1 ? '<span class="tag hot">🆕 новый листинг</span>' : d.nl === 0 ? '<span class="tag">📦 был на рынке</span>' : "";
+    const tags = age + (d.w || []).map(w => `<span class="tag${/дешевле|самый дешёвый/.test(w) ? " hot" : ""}">${esc(w)}</span>`).join("");
     const floors = [d.f ? `флор <b>${esc(num(d.f))}</b>` : "", d.mf ? `модель <b>${esc(num(d.mf))}</b>` : ""].filter(Boolean).join(" · ");
     return `<div class="deal">
       <div class="thumb" style="${thumbBg(d)}"><img src="${esc(modelImg(d))}" alt="" loading="lazy" onerror="const p=this.parentNode;this.remove();p.textContent='🎁'"></div>
