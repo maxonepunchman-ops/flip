@@ -59,7 +59,7 @@
   .stat span { font-size: 11.5px; color: var(--muted); }
 
   /* вкладки */
-  .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 4px; margin-bottom: 14px; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr 1fr; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 4px; margin-bottom: 14px; }
   .tabs button { border: 0; background: none; padding: 10px; border-radius: 10px; font-weight: 600; color: var(--muted); cursor: pointer; }
   .tabs button.on { background: var(--card2); color: var(--text); box-shadow: 0 1px 0 rgba(255,255,255,.04) inset; }
 
@@ -130,6 +130,22 @@
            font-size: 14px; font-weight: 600; box-shadow: 0 10px 30px rgba(0,0,0,.4); transition: .25s ease; pointer-events: none; z-index: 10; }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
   .toast.bad { border-color: rgba(240,75,75,.6); color: #ffb4b4; }
+  /* цели-снайперы */
+  .tgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .tcard { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+  .tcard.off { opacity: .55; }
+  .timg { aspect-ratio: 1 / 1; display: grid; place-items: center; font-size: 40px; background: linear-gradient(135deg, #2a3142, #1b2130); }
+  .timg img { width: 78%; height: 78%; object-fit: contain; filter: drop-shadow(0 6px 12px rgba(0,0,0,.35)); }
+  .tbody { padding: 10px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+  .tname { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tattr { font-size: 12.5px; color: #c9d1e4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tacts { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 8px; }
+  .field + .field { margin-top: 8px; }
+  .field select { width: 100%; border: 0; outline: 0; background: none; font-size: 16px; font-weight: 600; padding: 4px 0 2px; color: var(--text); }
+  .field select option { background: var(--card2); }
+  .btn-wide { width: 100%; margin-top: 12px; border: 0; border-radius: 12px; padding: 13px; font-weight: 800; color: #fff; cursor: pointer;
+              background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+  .btn-wide:active { transform: scale(.98); }
   .hidden { display: none; }
   .credit { text-align: center; font-size: 11.5px; color: var(--muted); margin: 18px 0 0; }
   .credit a { color: #9cc6ff; text-decoration: none; }
@@ -158,10 +174,25 @@
 
   <div class="tabs">
     <button class="on" data-tab="deals">Сделки</button>
+    <button data-tab="targets">🎯 Цели</button>
     <button data-tab="filters">Фильтры</button>
   </div>
 
   <section id="deals"></section>
+
+  <section id="targets" class="hidden">
+    <div class="hint" style="margin:0 0 10px">Цель — что ловить точно: коллекция, по желанию модель и фон, и потолок цены. Каждый новый такой лот придёт сразу, даже без «выгоды». Включается и выключается сразу, без «Сохранить».</div>
+    <div class="tgrid" id="tlist"></div>
+    <div class="card">
+      <h3>Новая цель</h3>
+      <div class="field"><label>Коллекция</label><input id="tColl" list="giftList" placeholder="Например Plush Pepe" autocomplete="off"></div>
+      <datalist id="giftList"></datalist>
+      <div class="field"><label>Модель</label><select id="tModel"><option value="">Любая</option></select></div>
+      <div class="field"><label>Фон</label><select id="tBack"><option value="">Любой</option></select></div>
+      <div class="field"><label>Цена до, TON (пусто — без потолка)</label><input id="tPrice" type="number" inputmode="decimal" min="0" step="1"></div>
+      <button class="btn-wide" id="tAdd">🎯 Добавить цель</button>
+    </div>
+  </section>
 
   <section id="filters" class="hidden">
     <div class="card">
@@ -180,9 +211,9 @@
     </div>
 
     <div class="card">
-      <div class="range-head"><h3>Монохром не дороже</h3><b id="xfloorVal">2× флора</b></div>
-      <input type="range" id="xfloor" min="0" max="6" step="0.5">
-      <div class="hint">Монохром присылать, только если цена не выше стольких флоров коллекции — чтобы не слать переоценённые. 0 — без потолка.</div>
+      <div class="range-head"><h3>Наценка за монохром и фон</h3><b id="xfloorVal">до 15%</b></div>
+      <input type="range" id="xfloor" min="0" max="60" step="5">
+      <div class="hint">Монохром и хороший фон присылать, только если цена не выше честной цены модели (самый дешёвый такой же лот на Portals и MRKT и недавние продажи) больше чем на столько. Black и Onyx — только дешевле остальных таких в коллекции.</div>
     </div>
 
     <div class="card">
@@ -249,13 +280,15 @@ function decodeHash(h) {
 }
 const decode = () => decodeHash(location.hash);
 const DEMO = {
-  cfg: { markets: ["portals"], collections: [], min_price: 0, max_price: 50, min_discount: 25, max_x_floor: 2, mono_mode: "strict",
-         backdrops: ["Black", "Onyx Black"], monochrome: true, nice_numbers: true, hunt: true, paused: false },
+  cfg: { markets: ["portals"], collections: [], min_price: 0, max_price: 50, min_discount: 25, max_premium: 15, mono_mode: "strict",
+         backdrops: ["Black", "Onyx Black"], monochrome: true, nice_numbers: true, hunt: false, paused: false,
+         targets: [{ c: "Durov's Cap", m: "Asterix", b: "", p: 3909, on: true }, { c: "Heart Locket", m: "", b: "Onyx Black", p: 2000, on: true },
+                   { c: "Plush Pepe", m: "", b: "", p: 0, on: false }] },
   st: { found: 3, interval: 10 }, bot: "",
   deals: [
-    { c: "Liberty Figure", n: 136983, m: "Ice Queen", b: "Cobalt Blue", s: "Carrot", p: 14.95, d: null, w: ["монохром"], mk: "portals",
+    { c: "Liberty Figure", n: 136983, m: "Ice Queen", b: "Cobalt Blue", s: "Carrot", p: 14.95, d: null, w: ["монохром, наценка всего 8%"], mk: "portals",
       f: 5.6, mf: 6.7, bc: ["#5b9ad2", "#2d5c94"], u: "https://t.me/portals/market", t: "12:31" },
-    { c: "Pet Snake", n: 10511, m: "Venomous", b: "Black", s: "Jingle Bell", p: 33, d: null, w: ["фон Black: самый дешёвый в коллекции, следующий 36 TON"], mk: "portals",
+    { c: "Pet Snake", n: 10511, m: "Venomous", b: "Black", s: "Jingle Bell", p: 33, d: null, w: ["Black: дешевле остальных в коллекции, следующий 36 TON"], mk: "portals",
       f: 4.33, mf: 5, bc: ["#363738", "#0e0f0f"], t: "03:58" },
     { c: "Lol Pop", n: 4444, m: "Blue Goo", b: "Sapphire", s: "Star", p: 4.3, d: null, w: ["одинаковые цифры #4444"], mk: "mrkt",
       f: 3.9, t: "03:12" },
@@ -263,7 +296,7 @@ const DEMO = {
 };
 let data, cfg, saved;
 const clone = x => JSON.parse(JSON.stringify(x));
-const filtersOf = c => { const x = clone(c); delete x.paused; return JSON.stringify(x); };   // пауза — не фильтр
+const filtersOf = c => { const x = clone(c); delete x.paused; delete x.targets; return JSON.stringify(x); };   // пауза и цели — не фильтры
 
 // Картинка модели — из открытой базы changes.tg, фон — градиент цветов фона подарка. Не загрузилась — 🎁.
 const modelImg = d => `${API}model/${encodeURIComponent(d.c)}/${encodeURIComponent(d.m)}.png?size=256`;
@@ -315,9 +348,103 @@ let VOCAB = null;
 async function vocab() {
   if (!VOCAB) {
     const [b, g] = await Promise.all([fetch(API + "backdrops").then(r => r.json()), fetch(API + "gifts").then(r => r.json())]);
-    VOCAB = { b: b.map(x => x.name), g: g.filter(x => typeof x === "string") };
+    VOCAB = { b: b.map(x => x.name), g: g.filter(x => typeof x === "string"), hex: {} };
+    b.forEach(x => { if (x.hex) VOCAB.hex[x.name.toLowerCase()] = [x.hex.centerColor, x.hex.edgeColor]; });
   }
   return VOCAB;
+}
+
+// ── цели-снайперы: команды боту ta… (добавить), tt<i> (вкл/выкл), td<i> (удалить) — как decode_target у бота
+function b64utf8(s) {
+  let bin = ""; new TextEncoder().encode(s).forEach(x => bin += String.fromCharCode(x));
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function encodeTarget(t, V) {
+  const ci = V.g.findIndex(x => x.toLowerCase() === t.c.toLowerCase());
+  if (ci < 0) throw new Error("Нет такой коллекции: " + t.c);
+  const bi = t.b ? V.b.findIndex(x => x.toLowerCase() === t.b.toLowerCase()) + 1 : 0;
+  if (t.b && !bi) throw new Error("Нет такого фона: " + t.b);
+  const code = "ta" + B64[V.b.length % 64] + B64[V.g.length % 64] + B64[ci >> 6] + B64[ci & 63] + B64[bi >> 6] + B64[bi & 63]
+             + num4(t.p || 0) + b64utf8(t.m || "");
+  if (code.length > 64) throw new Error("Слишком длинное название модели");
+  return code;
+}
+const collImg = c => `${API}original/${encodeURIComponent(c)}.png?size=256`;
+function targetBg(t) {
+  const h = t.b && VOCAB && VOCAB.hex[t.b.toLowerCase()];
+  return h && HEX.test(h[0]) && HEX.test(h[1]) ? `background: radial-gradient(circle at 50% 45%, ${h[0]}, ${h[1]})` : "";
+}
+function renderTargets() {
+  const items = cfg.targets || [];
+  const box = $("tlist");
+  if (!items.length) {
+    box.innerHTML = '<div class="empty" style="grid-column:1/-1"><b>🎯</b>Целей пока нет — добавь первую ниже.</div>';
+    return;
+  }
+  box.innerHTML = items.map((t, i) => `<div class="tcard${t.on === false ? " off" : ""}">
+      <div class="timg" style="${targetBg(t)}"><img src="${esc(t.m ? modelImg({ c: t.c, m: t.m }) : collImg(t.c))}" alt="" loading="lazy" onerror="const p=this.parentNode;this.remove();p.textContent='🎁'"></div>
+      <div class="tbody">
+        <div class="tname">🎁 ${esc(t.c)}</div>
+        <div class="tattr">🧩 ${esc(t.m || "любая модель")}</div>
+        <div class="tattr">🎨 ${esc(t.b || "любой фон")}</div>
+        <div class="tattr">💎 ${t.p ? "до " + esc(num(t.p)) + " TON" : "без потолка"}</div>
+        <div class="tacts">
+          <label class="switch"><input type="checkbox" data-tt="${i}" ${t.on !== false ? "checked" : ""}><span></span></label>
+          <button class="btn-s" data-td="${i}" title="Удалить">🗑</button>
+        </div>
+      </div>
+    </div>`).join("");
+  box.querySelectorAll("[data-tt]").forEach(el => el.onchange = () => {
+    const i = Number(el.dataset.tt); items[i].on = el.checked; haptic("tap");
+    if (sendCmd("tt" + B64[i])) toast(el.checked ? "✅ Цель включена" : "⏸ Цель выключена");
+    renderTargets();
+  });
+  box.querySelectorAll("[data-td]").forEach(el => el.onclick = () => {
+    const i = Number(el.dataset.td);
+    const go = () => { items.splice(i, 1); haptic("tap"); if (sendCmd("td" + B64[i])) toast("🗑 Цель удалена"); renderTargets(); };
+    if (inTelegram && tg.showConfirm) tg.showConfirm("Удалить цель «" + items[i].c + "»?", ok => ok && go()); else go();
+  });
+}
+async function fillTargetForm() {
+  const V = await vocab();
+  $("giftList").innerHTML = V.g.map(g => `<option value="${esc(g)}">`).join("");
+  renderTargets();
+}
+async function pickCollection() {
+  const V = await vocab();
+  const name = V.g.find(x => x.toLowerCase() === $("tColl").value.trim().toLowerCase());
+  const model = $("tModel"), back = $("tBack");
+  model.innerHTML = '<option value="">Любая</option>'; back.innerHTML = '<option value="">Любой</option>';
+  if (!name) return;
+  $("tColl").value = name;
+  try {
+    const [ms, bs] = await Promise.all([fetch(API + "models/" + encodeURIComponent(name)).then(r => r.json()),
+                                        fetch(API + "backdrops/" + encodeURIComponent(name)).then(r => r.json()).catch(() => null)]);
+    model.innerHTML += (ms || []).filter(x => x && x.name)
+      .map(x => `<option value="${esc(x.name)}">${esc(x.name)}${x.rarityPermille ? " · " + x.rarityPermille / 10 + "%" : ""}</option>`).join("");
+    const backs = Array.isArray(bs) && bs.length ? bs.map(x => typeof x === "string" ? x : x.name).filter(Boolean) : V.b;
+    back.innerHTML += backs.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
+  } catch (e) {
+    back.innerHTML += V.b.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
+  }
+}
+async function addTarget() {
+  haptic("tap");
+  try {
+    const V = await vocab();
+    const c = V.g.find(x => x.toLowerCase() === $("tColl").value.trim().toLowerCase());
+    if (!c) throw new Error($("tColl").value.trim() ? "Нет такой коллекции" : "Выбери коллекцию");
+    const t = { c, m: $("tModel").value, b: $("tBack").value, p: Math.max(0, Number($("tPrice").value) || 0), on: true };
+    const items = cfg.targets = cfg.targets || [];
+    const same = items.find(x => x.c === t.c && (x.m || "") === t.m && (x.b || "") === t.b);
+    if (!same && items.length >= 20) throw new Error("Целей уже 20 — удали лишние");
+    if (!sendCmd(encodeTarget(t, V))) return;
+    if (same) Object.assign(same, { p: t.p, on: true }); else items.push(t);
+    haptic("success"); toast("🎯 Цель добавлена");
+    $("tPrice").value = ""; renderTargets();
+  } catch (e) {
+    haptic("error"); toast(e.message || "Не получилось — проверь интернет", true);
+  }
 }
 function encodeFilters(c, V) {
   const lower = list => new Set(list.map(x => x.toLowerCase()));
@@ -327,7 +454,7 @@ function encodeFilters(c, V) {
   if (badCol.length) throw new Error("Нет такой коллекции: " + badCol.join(", "));
   const flags = (c.markets.includes("portals") ? 1 : 0) | (c.markets.includes("mrkt") ? 2 : 0) | (c.monochrome ? 4 : 0)
               | (c.mono_mode !== "wide" ? 8 : 0) | (c.nice_numbers ? 16 : 0) | (c.hunt !== false ? 32 : 0);
-  return "f" + B64[flags] + B64[Math.min(63, Math.round((c.min_discount || 0) / 5))] + B64[Math.min(63, Math.round((c.max_x_floor || 0) * 2))]
+  return "f" + B64[flags] + B64[Math.min(63, Math.round((c.min_discount || 0) / 5))] + B64[Math.min(63, Math.round((c.max_premium ?? 15) / 5))]
        + num4(c.min_price || 0) + num4(c.max_price || 0) + B64[V.b.length % 64] + B64[V.g.length % 64]
        + mask(V.b, c.backdrops) + mask(V.g, c.collections).replace(/A+$/, "");
 }
@@ -392,8 +519,8 @@ function renderFilters() {
   });
   $("discount").value = cfg.min_discount;
   $("discVal").textContent = cfg.min_discount ? cfg.min_discount + "%" : "выкл.";
-  $("xfloor").value = cfg.max_x_floor || 0;
-  $("xfloorVal").textContent = cfg.max_x_floor ? cfg.max_x_floor + "× флора" : "без потолка";
+  $("xfloor").value = cfg.max_premium ?? 15;
+  $("xfloorVal").textContent = cfg.max_premium ? "до " + cfg.max_premium + "%" : "только по цене модели";
   $("markets").innerHTML = Object.entries(MARKETS).map(([k, m]) =>
     `<span class="chip${cfg.markets.includes(k) ? " on" : ""}" data-v="${k}">${m.title}</span>`).join("");
   $("markets").querySelectorAll(".chip").forEach(c => c.onclick = () => {
@@ -449,15 +576,16 @@ function togglePause(on) {
 // ── события
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
-  $("deals").classList.toggle("hidden", b.dataset.tab !== "deals");
-  $("filters").classList.toggle("hidden", b.dataset.tab !== "filters");
+  ["deals", "targets", "filters"].forEach(id => $(id).classList.toggle("hidden", b.dataset.tab !== id));
+  $("saveBtn").style.visibility = b.dataset.tab === "filters" ? "" : "hidden";
+  if (b.dataset.tab === "targets") fillTargetForm().catch(() => toast("Список коллекций не загрузился — проверь интернет", true));
   try { tg.HapticFeedback.selectionChanged(); } catch (e) {}
 });
 $("running").onchange = e => togglePause(!e.target.checked);
 $("minPrice").onchange = e => { cfg.min_price = Math.max(0, Number(e.target.value) || 0); changed(); };
 $("maxPrice").onchange = e => { cfg.max_price = Math.max(0, Number(e.target.value) || 0); changed(); };
 $("discount").oninput = e => { cfg.min_discount = Number(e.target.value); changed(); };
-$("xfloor").oninput = e => { cfg.max_x_floor = Number(e.target.value); changed(); };
+$("xfloor").oninput = e => { cfg.max_premium = Number(e.target.value); changed(); };
 $("mono").onchange = e => { cfg.monochrome = e.target.checked; changed(); };
 $("monoStrict").onchange = e => { cfg.mono_mode = e.target.checked ? "strict" : "wide"; changed(); };
 $("numbers").onchange = e => { cfg.nice_numbers = e.target.checked; changed(); };
@@ -471,13 +599,16 @@ $("colAdd").onclick = () => addFrom("colInput", "collections");
 $("bgInput").onkeydown = e => e.key === "Enter" && addFrom("bgInput", "backdrops");
 $("colInput").onkeydown = e => e.key === "Enter" && addFrom("colInput", "collections");
 $("saveBtn").onclick = save;
+$("tColl").onchange = pickCollection;
+$("tAdd").onclick = addTarget;
 $("creditLink").onclick = e => { e.preventDefault(); openLink("https://t.me/GiftChanges"); };
 
 function start(d) {
   data = d; cfg = clone(d.cfg); saved = filtersOf(cfg);
   if (!Array.isArray(cfg.backdrops)) cfg.backdrops = [];
   if (!Array.isArray(cfg.collections)) cfg.collections = [];
-  renderHead(); renderDeals(); renderFilters();
+  if (!Array.isArray(cfg.targets)) cfg.targets = [];
+  renderHead(); renderDeals(); renderFilters(); renderTargets();
 }
 
 if (inTelegram) {
